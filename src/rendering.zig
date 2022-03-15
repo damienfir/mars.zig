@@ -149,7 +149,7 @@ fn drawSprite(sprite: Sprite, model: Mat4) !void {
     defer c.glBindVertexArray(0);
 
     try shader.set_mat4("model", model);
-    try shader.set_mat4("view", Mat4.eye());
+    try shader.set_mat4("view", game.view());
     try shader.set_mat4("projection", game.perpective);
     try shader.set_vec3("color", sprite.color);
 

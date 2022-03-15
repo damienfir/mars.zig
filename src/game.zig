@@ -77,4 +77,5 @@ const px_per_second = 200;
 pub fn update(dt: f32) !void {
     const vel = if (player_velocity.norm() > 0) player_velocity.normalize() else player_velocity;
     player = player.add(vel.scale(dt * px_per_second));
+    camera = player;
 }
