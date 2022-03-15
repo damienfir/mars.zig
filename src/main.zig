@@ -24,8 +24,18 @@ fn glfw_key_callback(window: ?*c.GLFWwindow, key: c_int, scancode: c_int, action
         }
     } else if (action == c.GLFW_RELEASE) {
         switch (key) {
-            c.GLFW_KEY_A, c.GLFW_KEY_D => game.player_velocity.x = 0,
-            c.GLFW_KEY_S, c.GLFW_KEY_W => game.player_velocity.y = 0,
+            c.GLFW_KEY_A => if (game.player_velocity.x < 0) {
+                game.player_velocity.x = 0;
+            },
+            c.GLFW_KEY_D => if (game.player_velocity.x > 0) {
+                game.player_velocity.x = 0;
+            },
+            c.GLFW_KEY_S => if (game.player_velocity.y < 0) {
+                game.player_velocity.y = 0;
+            },
+            c.GLFW_KEY_W => if (game.player_velocity.y > 0) {
+                game.player_velocity.y = 0;
+            },
             else => {},
         }
     }
@@ -41,10 +51,7 @@ pub fn main() !void {
 
     _ = c.glfwSetKeyCallback(window, glfw_key_callback);
 
-    // c.glEnable(c.GL_DEPTH_TEST);
     c.glClearColor(0, 0, 0, 0);
-    // c.glEnable(c.GL_BLEND);
-    // c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
 
     var timer = try std.time.Timer.start();
 
@@ -64,8 +71,4 @@ pub fn main() !void {
     }
 
     _ = c.glfwTerminate();
-}
-
-test "basic test" {
-    try std.testing.expectEqual(10, 3 + 7);
 }
