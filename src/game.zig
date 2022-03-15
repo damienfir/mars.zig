@@ -21,7 +21,10 @@ pub var player_velocity: Vec2 = Vec2.init(0, 0);
 
 pub var camera = Vec2.init(0, 0);
 
-pub const Cell = u8;
+pub const Cell = enum(u8) {
+    Dirt,
+    Building,
+};
 
 pub const Grid = struct {
     cells: []Cell,
@@ -49,7 +52,7 @@ pub const Grid = struct {
     }
 
     pub fn fillZeros(g: *Grid) void {
-        for (g.cells) |*cell| cell.* = 0;
+        for (g.cells) |*cell| cell.* = .Dirt;
     }
 };
 
@@ -57,16 +60,16 @@ pub fn init() !void {
     const n_rows = 30;
     grid = try Grid.init(n_rows, n_rows * window_ratio);
     grid.fillZeros();
-    grid.set(1, 1, 1);
-    grid.set(1, 2, 1);
-    grid.set(1, 3, 1);
+    grid.set(1, 1, .Building);
+    grid.set(1, 2, .Building);
+    grid.set(1, 3, .Building);
 
     cell_size = window_height / @intToFloat(f32, grid.rows);
     player = Vec2.init(window_width / 2.0, window_height / 2.0);
 }
 
 pub fn view() Mat4 {
-    return Mat4.translation2d(camera.neg());
+    return Mat4.translation2d(camera.sub(Vec2.init(window_width / 2, window_height / 2)).neg());
 }
 
 const px_per_second = 200;

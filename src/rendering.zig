@@ -16,8 +16,9 @@ var grid_sprites: [10]Sprite = undefined;
 var player_sprite: Sprite = undefined;
 
 pub fn init() !void {
-    grid_sprites[0] = makeSprite(Vec3.init(0.8, 0.45, 0.1));
-    grid_sprites[1] = makeSprite(Vec3.init(0.3, 0.3, 0.3));
+    grid_sprites[@enumToInt(game.Cell.Dirt)] = makeSprite(Vec3.init(0.8, 0.45, 0.1));
+    grid_sprites[@enumToInt(game.Cell.Building)] = makeSprite(Vec3.init(0.3, 0.3, 0.3));
+
     player_sprite = makeSprite(Vec3.init(0.2, 0.2, 0.2));
 
     shader = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
@@ -163,7 +164,7 @@ fn drawCell(cell: game.Cell, xi: u32, yi: u32) !void {
     model.set(1, 1, scaling);
     model.set(0, 3, @intToFloat(f32, xi) * scaling);
     model.set(1, 3, @intToFloat(f32, yi) * scaling);
-    try drawSprite(grid_sprites[cell], model);
+    try drawSprite(grid_sprites[@enumToInt(cell)], model);
 }
 
 fn drawPlayer() !void {
