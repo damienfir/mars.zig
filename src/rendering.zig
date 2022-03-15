@@ -18,6 +18,10 @@ var player_sprite: Sprite = undefined;
 pub fn init() !void {
     grid_sprites[@enumToInt(game.Cell.Dirt)] = makeSprite(Vec3.init(0.8, 0.45, 0.1));
     grid_sprites[@enumToInt(game.Cell.Building)] = makeSprite(Vec3.init(0.3, 0.3, 0.3));
+    grid_sprites[@enumToInt(game.Cell.Hab)] = makeSprite(Vec3.init(0.8, 0.8, 0.8));
+    grid_sprites[@enumToInt(game.Cell.Greenhouse)] = makeSprite(Vec3.init(0.1, 0.6, 0.1));
+    grid_sprites[@enumToInt(game.Cell.Factory)] = makeSprite(Vec3.init(0.1, 0.45, 0.8));
+    grid_sprites[@enumToInt(game.Cell.Spaceport)] = makeSprite(Vec3.init(0.5, 0.5, 0.5));
 
     player_sprite = makeSprite(Vec3.init(0.2, 0.2, 0.2));
 
@@ -169,10 +173,9 @@ fn drawCell(cell: game.Cell, xi: u32, yi: u32) !void {
 
 fn drawPlayer() !void {
     const p = game.player;
-    const scaling = game.cell_size * 0.8;
     var model = Mat4.eye();
-    model.set(0, 0, scaling);
-    model.set(1, 1, scaling);
+    model.set(0, 0, game.player_size);
+    model.set(1, 1, game.player_size);
     model.set(0, 3, p.x);
     model.set(1, 3, p.y);
     try drawSprite(player_sprite, model);

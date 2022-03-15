@@ -7,6 +7,35 @@ const c = @cImport({
 const game = @import("game.zig");
 const rendering = @import("rendering.zig");
 
+fn loadMap(path: []const u8) !game.Grid {
+    const file = try std.fs.cwd().openFile(path, .{ .read = true });
+    var buffer_: [5096]u8 = undefined;
+    const bytes_read = try file.readAll(&buffer_);
+    const buffer = buffer_[0..bytes_read];
+
+    var cells = std.ArrayList(game.Cell).init(game.allocator);
+
+    var n_rows: u32 = 0;
+    for (buffer) |char| {
+        switch (char) {
+            'o' => try cells.append(.Dirt),
+            'h' => try cells.append(.Hab),
+            's' => try cells.append(.Spaceport),
+            'g' => try cells.append(.Greenhouse),
+            'f' => try cells.append(.Factory),
+            '\n' => n_rows += 1,
+            ',' => {},
+            else => {},
+        }
+    }
+
+    return game.Grid{
+        .rows = n_rows,
+        .cols = @intCast(u32 ,cells.items.len) / n_rows,
+        .cells = cells.toOwnedSlice(),
+    };
+}
+
 fn glfw_key_callback(window: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
     _ = mods;
     _ = scancode;
@@ -55,6 +84,7 @@ pub fn main() !void {
 
     var timer = try std.time.Timer.start();
 
+    game.grid = try loadMap("map.csv");
     try game.init();
     try rendering.init();
 
