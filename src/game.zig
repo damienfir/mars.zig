@@ -74,9 +74,9 @@ pub fn init() !void {
     // grid.set(1, 2, .Building);
     // grid.set(1, 3, .Building);
 
-    cell_size = 40;
+    cell_size = 50;
     player = Vec2.init(@intToFloat(f32, grid.cols) / 2.0, @intToFloat(f32, grid.rows) / 2.0).scale(cell_size);
-    player_size = cell_size * 0.5;
+    player_size = cell_size * 0.9;
 }
 
 pub fn view() Mat4 {

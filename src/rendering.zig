@@ -8,24 +8,27 @@ const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 
 const game = @import("game.zig");
+const image = @import("image.zig");
 
 const c_allocator = std.heap.c_allocator;
 
-var shader: Shader = undefined;
-var grid_sprites: [10]Sprite = undefined;
+var shader_color: Shader = undefined;
+var shader_sprite: Shader = undefined;
+var grid_sprites: [10]ColorSprite = undefined;
 var player_sprite: Sprite = undefined;
 
 pub fn init() !void {
-    grid_sprites[@enumToInt(game.Cell.Dirt)] = makeSprite(Vec3.init(0.8, 0.45, 0.1));
-    grid_sprites[@enumToInt(game.Cell.Building)] = makeSprite(Vec3.init(0.3, 0.3, 0.3));
-    grid_sprites[@enumToInt(game.Cell.Hab)] = makeSprite(Vec3.init(0.8, 0.8, 0.8));
-    grid_sprites[@enumToInt(game.Cell.Greenhouse)] = makeSprite(Vec3.init(0.1, 0.6, 0.1));
-    grid_sprites[@enumToInt(game.Cell.Factory)] = makeSprite(Vec3.init(0.1, 0.45, 0.8));
-    grid_sprites[@enumToInt(game.Cell.Spaceport)] = makeSprite(Vec3.init(0.5, 0.5, 0.5));
+    grid_sprites[@enumToInt(game.Cell.Dirt)] = makeColorSprite(Vec3.init(0.8, 0.45, 0.1));
+    grid_sprites[@enumToInt(game.Cell.Building)] = makeColorSprite(Vec3.init(0.3, 0.3, 0.3));
+    grid_sprites[@enumToInt(game.Cell.Hab)] = makeColorSprite(Vec3.init(0.8, 0.8, 0.8));
+    grid_sprites[@enumToInt(game.Cell.Greenhouse)] = makeColorSprite(Vec3.init(0.1, 0.6, 0.1));
+    grid_sprites[@enumToInt(game.Cell.Factory)] = makeColorSprite(Vec3.init(0.1, 0.45, 0.8));
+    grid_sprites[@enumToInt(game.Cell.Spaceport)] = makeColorSprite(Vec3.init(0.5, 0.5, 0.5));
 
-    player_sprite = makeSprite(Vec3.init(0.2, 0.2, 0.2));
+    player_sprite = try makeSprite("assets/player-south.png");
 
-    shader = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
+    shader_color = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
+    shader_sprite = try Shader.init("shaders/vertex_sprite.glsl", "shaders/fragment_sprite.glsl");
 }
 
 pub const Shader = struct {
@@ -122,13 +125,61 @@ pub const Shader = struct {
     }
 };
 
-const Sprite = struct {
+const ColorSprite = struct {
     vao: c.GLuint,
     color: Vec3,
 };
 
-fn makeSprite(color: Vec3) Sprite {
+const Sprite = struct {
+    vao: c.GLuint,
+    texture: c.GLuint,
+};
+
+fn makeSprite(path: []const u8) !Sprite {
     var sprite: Sprite = undefined;
+    c.glGenVertexArrays(1, &sprite.vao);
+    c.glBindVertexArray(sprite.vao);
+    defer c.glBindVertexArray(0);
+
+    c.glGenTextures(1, &sprite.texture);
+    c.glBindTexture(c.GL_TEXTURE_2D, sprite.texture);
+
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+
+    const im = try image.load(path);
+    defer im.deinit();
+    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(c_int, im.width), @intCast(c_int, im.height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, im.data.ptr);
+    c.glGenerateMipmap(c.GL_TEXTURE_2D);
+
+    var vbo: c.GLuint = undefined;
+    c.glGenBuffers(1, &vbo);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
+    defer c.glBindBuffer(c.GL_ARRAY_BUFFER, 0);
+
+    const vertices = [_]f32{
+        //  vertex  texture
+        0, 0, 0, 1,
+        1, 0, 1, 1,
+        0, 1, 0, 0,
+        0, 1, 0, 0,
+        1, 0, 1, 1,
+        1, 1, 1, 0,
+    };
+
+    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(c_long, 4 * 6 * @sizeOf(f32)), &vertices, c.GL_STATIC_DRAW);
+
+    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), null);
+    c.glEnableVertexAttribArray(0);
+
+    c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), @intToPtr(*anyopaque, 2 * @sizeOf(f32)));
+    c.glEnableVertexAttribArray(1);
+
+    return sprite;
+}
+
+fn makeColorSprite(color: Vec3) ColorSprite {
+    var sprite: ColorSprite = undefined;
     c.glGenVertexArrays(1, &sprite.vao);
     var vbo: c.GLuint = undefined;
     c.glGenBuffers(1, &vbo);
@@ -149,13 +200,31 @@ fn makeSprite(color: Vec3) Sprite {
 }
 
 fn drawSprite(sprite: Sprite, model: Mat4) !void {
+    shader_sprite.use();
+    defer shader_sprite.unuse();
+
+    c.glBindTexture(c.GL_TEXTURE_2D, sprite.texture);
     c.glBindVertexArray(sprite.vao);
     defer c.glBindVertexArray(0);
 
-    try shader.set_mat4("model", model);
-    try shader.set_mat4("view", game.view());
-    try shader.set_mat4("projection", game.perpective);
-    try shader.set_vec3("color", sprite.color);
+    try shader_sprite.set_mat4("model", model);
+    try shader_sprite.set_mat4("view", game.view());
+    try shader_sprite.set_mat4("projection", game.perpective);
+
+    c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
+}
+
+fn drawColorSprite(sprite: ColorSprite, model: Mat4) !void {
+    shader_color.use();
+    defer shader_color.unuse();
+
+    c.glBindVertexArray(sprite.vao);
+    defer c.glBindVertexArray(0);
+
+    try shader_color.set_mat4("model", model);
+    try shader_color.set_mat4("view", game.view());
+    try shader_color.set_mat4("projection", game.perpective);
+    try shader_color.set_vec3("color", sprite.color);
 
     c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
 }
@@ -168,7 +237,7 @@ fn drawCell(cell: game.Cell, xi: u32, yi: u32) !void {
     model.set(1, 1, scaling);
     model.set(0, 3, @intToFloat(f32, xi) * scaling);
     model.set(1, 3, @intToFloat(f32, yi) * scaling);
-    try drawSprite(grid_sprites[@enumToInt(cell)], model);
+    try drawColorSprite(grid_sprites[@enumToInt(cell)], model);
 }
 
 fn drawPlayer() !void {
@@ -182,9 +251,6 @@ fn drawPlayer() !void {
 }
 
 pub fn draw() !void {
-    shader.use();
-    defer shader.unuse();
-
     var yi: u32 = 0;
     while (yi < game.grid.rows) : (yi += 1) {
         var xi: u32 = 0;

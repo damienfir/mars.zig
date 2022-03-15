@@ -81,6 +81,8 @@ pub fn main() !void {
     _ = c.glfwSetKeyCallback(window, glfw_key_callback);
 
     c.glClearColor(0, 0, 0, 0);
+    c.glEnable(c.GL_BLEND);
+    c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
 
     var timer = try std.time.Timer.start();
 
