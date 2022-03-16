@@ -11,17 +11,31 @@ pub const window_height: f32 = window_width / window_ratio;
 pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 pub const allocator = gpa.allocator();
 
-pub const perpective = Mat4.orthographic(0, window_width, 0, window_height, -1, 1);
-
-pub var grid: Grid = undefined;
 pub var cell_size: f32 = undefined;
 pub var player_size: f32 = undefined;
-
 pub var player: Vec2 = undefined;
-
 pub var player_velocity: Vec2 = Vec2.init(0, 0);
-
 pub var camera = Vec2.init(0, 0);
+pub const perpective = Mat4.orthographic(0, window_width, 0, window_height, -1, 1);
+
+pub var scenes: [4]Grid = undefined;
+pub var current_scene: u32 = 0;
+
+const cells_per_second = 7;
+
+pub const Building = struct {
+    size: u32,
+    pos_x: u32,
+    pos_y: u32,
+    class: BuildingType,
+};
+
+pub const BuildingType = enum {
+    Hab,
+    Factory,
+    Spaceport,
+    Greenhouse,
+};
 
 pub const Cell = enum(u8) {
     Dirt,
@@ -36,12 +50,14 @@ pub const Grid = struct {
     cells: []Cell,
     rows: u32,
     cols: u32,
+    buildings: std.ArrayList(Building),
 
     pub fn init(rows: u32, cols: u32) !Grid {
         return Grid{
             .rows = rows,
             .cols = cols,
-            .cells = try gpa.allocator().alloc(Cell, rows * cols),
+            .cells = try allocator.alloc(Cell, rows * cols),
+            .buildings = std.ArrayList(Building).init(allocator),
         };
     }
 
@@ -51,6 +67,13 @@ pub const Grid = struct {
 
     pub fn at(g: Grid, x: u32, y: u32) Cell {
         return g.cells[y * g.cols + x];
+    }
+
+    pub fn buildingAt(g: Grid, x: u32, y: u32) ?usize {
+        _ = x;
+        _ = y;
+        _ = g;
+        return null;
     }
 
     pub fn set(g: Grid, x: u32, y: u32, cell: Cell) void {
@@ -67,16 +90,29 @@ pub const Grid = struct {
 };
 
 pub fn init() !void {
-    // const n_rows = 30;
-    // grid = try Grid.init(n_rows, n_rows * window_ratio);
-    // grid.fillZeros();
-    // grid.set(1, 1, .Building);
-    // grid.set(1, 2, .Building);
-    // grid.set(1, 3, .Building);
+    scenes[0] = try Grid.init(16, 16);
+    scenes[0].fillZeros();
+    try scenes[0].buildings.append(Building{
+        .size = 5,
+        .pos_x = 3,
+        .pos_y = 12,
+        .class = .Hab,
+    });
+    try scenes[0].buildings.append(Building{
+        .size = 2,
+        .pos_x = 12,
+        .pos_y = 12,
+        .class = .Spaceport,
+    });
+    current_scene = 0;
 
     cell_size = 50;
-    player = Vec2.init(@intToFloat(f32, grid.cols) / 2.0, @intToFloat(f32, grid.rows) / 2.0).scale(cell_size);
+    player = Vec2.init(@intToFloat(f32, currentScene().cols) / 2.0, @intToFloat(f32, currentScene().rows) / 2.0).scale(cell_size);
     player_size = cell_size * 0.9;
+}
+
+pub fn currentScene() Grid {
+    return scenes[current_scene];
 }
 
 pub fn view() Mat4 {
@@ -87,13 +123,11 @@ pub fn collide(position: Vec2) bool {
     const p = position.add(Vec2.init(player_size / 2, player_size / 2));
     const x = @floatToInt(u32, p.x / cell_size);
     const y = @floatToInt(u32, p.y / cell_size);
-    if (!grid.inBounds(x, y) or grid.at(x, y) != .Dirt) {
+    if (!currentScene().inBounds(x, y) or currentScene().buildingAt(x, y) != null) {
         return true;
     }
     return false;
 }
-
-const cells_per_second = 7;
 
 pub fn update(dt: f32) !void {
     const vel = if (player_velocity.norm() > 0) player_velocity.normalize() else player_velocity;

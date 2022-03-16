@@ -17,6 +17,8 @@ var shader_sprite: Shader = undefined;
 var grid_sprites: [10]ColorSprite = undefined;
 var player_sprite: Sprite = undefined;
 var player_sprites: DirectionalSprites = undefined;
+var hab_sprite: Sprite = undefined;
+var spaceport_sprite: Sprite = undefined;
 
 const Direction = enum(u4) {
     North,
@@ -51,6 +53,9 @@ pub fn init() !void {
     player_sprites.sprites[@enumToInt(Direction.South)] = try makeSprite("assets/player-south.png");
     player_sprites.sprites[@enumToInt(Direction.East)] = try makeSprite("assets/player-east.png");
     player_sprites.sprites[@enumToInt(Direction.West)] = try makeSprite("assets/player-west.png");
+
+    hab_sprite = try makeSprite("assets/hab.png");
+    spaceport_sprite = try makeSprite("assets/spaceport.png");
 
     shader_color = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
     shader_sprite = try Shader.init("shaders/vertex_sprite.glsl", "shaders/fragment_sprite.glsl");
@@ -193,8 +198,13 @@ fn makeSprite(path: []const u8) !Sprite {
     c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
     defer c.glBindBuffer(c.GL_ARRAY_BUFFER, 0);
 
-    const x = if (aspect_ratio > 1) 1 else aspect_ratio;
-    const y = if (aspect_ratio < 1) 1 else aspect_ratio;
+    var x: f32 = 1;
+    var y = 1.0/aspect_ratio;
+    if (aspect_ratio < 1) {
+        x = aspect_ratio;
+        y = 1;
+    }
+    std.debug.print("{s} ({}): x {}, y {}\n", .{path, aspect_ratio, x, y});
     const vertices = [_]f32{
         //  vertex  texture
         0, 0, 0, 1,
@@ -292,6 +302,22 @@ fn vec2ToDirection(v: Vec2) Direction {
     }
 }
 
+fn drawBuilding(building: game.Building) !void {
+    var model = Mat4.eye();
+    model.set(0, 0, @intToFloat(f32, building.size) * game.cell_size);
+    model.set(1, 1, @intToFloat(f32, building.size) * game.cell_size);
+    model.set(0, 3, @intToFloat(f32, building.pos_x) * game.cell_size);
+    model.set(1, 3, @intToFloat(f32, building.pos_y) * game.cell_size);
+
+    const sprite = switch (building.class) {
+        .Hab => hab_sprite,
+        .Spaceport => spaceport_sprite,
+        else => hab_sprite,
+    };
+
+    try drawSprite(sprite, model);
+}
+
 fn drawPlayer() !void {
     const p = game.player;
     var model = Mat4.eye();
@@ -307,12 +333,16 @@ fn drawPlayer() !void {
 
 pub fn draw() !void {
     var yi: u32 = 0;
-    while (yi < game.grid.rows) : (yi += 1) {
+    while (yi < game.currentScene().rows) : (yi += 1) {
         var xi: u32 = 0;
-        while (xi < game.grid.cols) : (xi += 1) {
-            const cell = game.grid.at(xi, yi);
+        while (xi < game.currentScene().cols) : (xi += 1) {
+            const cell = game.currentScene().at(xi, yi);
             try drawCell(cell, xi, yi);
         }
+    }
+
+    for (game.currentScene().buildings.items) |building| {
+        try drawBuilding(building);
     }
 
     try drawPlayer();

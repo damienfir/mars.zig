@@ -18,20 +18,20 @@ fn loadMap(path: []const u8) !game.Grid {
     var n_rows: u32 = 0;
     for (buffer) |char| {
         switch (char) {
-            'o' => try cells.append(.Dirt),
-            'h' => try cells.append(.Hab),
-            's' => try cells.append(.Spaceport),
-            'g' => try cells.append(.Greenhouse),
-            'f' => try cells.append(.Factory),
+            // 'o' => try cells.append(.Dirt),
+            // 'h' => try cells.append(.Hab),
+            // 's' => try cells.append(.Spaceport),
+            // 'g' => try cells.append(.Greenhouse),
+            // 'f' => try cells.append(.Factory),
             '\n' => n_rows += 1,
-            ',' => {},
-            else => {},
+            // ',' => {},
+            else => try cells.append(.Dirt),
         }
     }
 
     return game.Grid{
         .rows = n_rows,
-        .cols = @intCast(u32 ,cells.items.len) / n_rows,
+        .cols = @intCast(u32, cells.items.len) / n_rows,
         .cells = cells.toOwnedSlice(),
     };
 }
@@ -86,7 +86,6 @@ pub fn main() !void {
 
     var timer = try std.time.Timer.start();
 
-    game.grid = try loadMap("map.csv");
     try game.init();
     try rendering.init();
 
