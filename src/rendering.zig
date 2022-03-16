@@ -16,6 +16,27 @@ var shader_color: Shader = undefined;
 var shader_sprite: Shader = undefined;
 var grid_sprites: [10]ColorSprite = undefined;
 var player_sprite: Sprite = undefined;
+var player_sprites: DirectionalSprites = undefined;
+
+const Direction = enum(u4) {
+    North,
+    South,
+    East,
+    West,
+};
+
+fn directionToVec2(d: Direction) Vec2 {
+    return switch (d) {
+        .North => Vec2.init(0, 1),
+        .South => Vec2.init(0, -1),
+        .East => Vec2.init(1, 0),
+        .West => Vec2.init(-1, 0),
+    };
+}
+
+const DirectionalSprites = struct {
+    sprites: [4]Sprite,
+};
 
 pub fn init() !void {
     grid_sprites[@enumToInt(game.Cell.Dirt)] = makeColorSprite(Vec3.init(0.8, 0.45, 0.1));
@@ -26,6 +47,10 @@ pub fn init() !void {
     grid_sprites[@enumToInt(game.Cell.Spaceport)] = makeColorSprite(Vec3.init(0.5, 0.5, 0.5));
 
     player_sprite = try makeSprite("assets/player-south.png");
+    player_sprites.sprites[@enumToInt(Direction.North)] = try makeSprite("assets/player-north.png");
+    player_sprites.sprites[@enumToInt(Direction.South)] = try makeSprite("assets/player-south.png");
+    player_sprites.sprites[@enumToInt(Direction.East)] = try makeSprite("assets/player-east.png");
+    player_sprites.sprites[@enumToInt(Direction.West)] = try makeSprite("assets/player-west.png");
 
     shader_color = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
     shader_sprite = try Shader.init("shaders/vertex_sprite.glsl", "shaders/fragment_sprite.glsl");
@@ -149,22 +174,35 @@ fn makeSprite(path: []const u8) !Sprite {
 
     const im = try image.load(path);
     defer im.deinit();
-    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(c_int, im.width), @intCast(c_int, im.height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, im.data.ptr);
+    c.glTexImage2D(
+        c.GL_TEXTURE_2D,
+        0,
+        c.GL_RGBA,
+        @intCast(c_int, im.width),
+        @intCast(c_int, im.height),
+        0,
+        c.GL_RGBA,
+        c.GL_UNSIGNED_BYTE,
+        im.data.ptr,
+    );
     c.glGenerateMipmap(c.GL_TEXTURE_2D);
+    const aspect_ratio = @intToFloat(f32, im.width) / @intToFloat(f32, im.height);
 
     var vbo: c.GLuint = undefined;
     c.glGenBuffers(1, &vbo);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
     defer c.glBindBuffer(c.GL_ARRAY_BUFFER, 0);
 
+    const x = if (aspect_ratio > 1) 1 else aspect_ratio;
+    const y = if (aspect_ratio < 1) 1 else aspect_ratio;
     const vertices = [_]f32{
         //  vertex  texture
         0, 0, 0, 1,
-        1, 0, 1, 1,
-        0, 1, 0, 0,
-        0, 1, 0, 0,
-        1, 0, 1, 1,
-        1, 1, 1, 0,
+        x, 0, 1, 1,
+        0, y, 0, 0,
+        0, y, 0, 0,
+        x, 0, 1, 1,
+        x, y, 1, 0,
     };
 
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(c_long, 4 * 6 * @sizeOf(f32)), &vertices, c.GL_STATIC_DRAW);
@@ -240,6 +278,20 @@ fn drawCell(cell: game.Cell, xi: u32, yi: u32) !void {
     try drawColorSprite(grid_sprites[@enumToInt(cell)], model);
 }
 
+fn vec2ToDirection(v: Vec2) Direction {
+    if (v.x > 0) {
+        return .East;
+    } else if (v.x < 0) {
+        return .West;
+    } else {
+        if (v.y > 0) {
+            return .North;
+        } else {
+            return .South;
+        }
+    }
+}
+
 fn drawPlayer() !void {
     const p = game.player;
     var model = Mat4.eye();
@@ -247,7 +299,10 @@ fn drawPlayer() !void {
     model.set(1, 1, game.player_size);
     model.set(0, 3, p.x);
     model.set(1, 3, p.y);
-    try drawSprite(player_sprite, model);
+
+    const direction = vec2ToDirection(game.player_velocity);
+
+    try drawSprite(player_sprites.sprites[@enumToInt(direction)], model);
 }
 
 pub fn draw() !void {
