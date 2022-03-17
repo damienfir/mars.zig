@@ -387,7 +387,7 @@ fn drawHud() !void {
     const text = try std.fmt.bufPrint(buffer, "{}", .{game.sols()});
 
     const scaling = font_size * game.cell_size;
-    const position = Vec2.init(200, 200);
+    const position = Vec2.init(10, game.window_height - 1.3 * scaling);
     var accumulated_width: f32 = position.x;
     for (text) |letter| {
         const sprite = font.sprites[letter - 48];
@@ -395,7 +395,7 @@ fn drawHud() !void {
         model.set(0, 0, scaling);
         model.set(1, 1, scaling);
         model.set(0, 3, accumulated_width);
-        model.set(1, 3, 200);
+        model.set(1, 3, position.y);
         accumulated_width += (sprite.width + letter_spacing) * scaling;
 
         try drawSpriteWithView(sprite, model, Mat4.eye());

@@ -50,7 +50,7 @@ const ticks_per_second = 10;
 const ticks_per_sol = 10;
 
 pub const HudState = struct {
-    ticks: u64 = 12345678900,
+    ticks: u64 = 0,
     fractional_ticks: f32 = 0,
 };
 
@@ -160,7 +160,7 @@ pub fn update(dt: f32) !void {
 
     camera = player;
 
-    // incrementTicks(dt);
+    incrementTicks(dt);
 }
 
 pub fn sols() u64 {
