@@ -204,7 +204,6 @@ fn makeSprite(path: []const u8) !Sprite {
         x = aspect_ratio;
         y = 1;
     }
-    std.debug.print("{s} ({}): x {}, y {}\n", .{path, aspect_ratio, x, y});
     const vertices = [_]f32{
         //  vertex  texture
         0, 0, 0, 1,

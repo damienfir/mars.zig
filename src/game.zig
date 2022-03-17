@@ -46,6 +46,16 @@ pub const Cell = enum(u8) {
     Greenhouse,
 };
 
+const ticks_per_second = 10;
+const ticks_per_sol = 100;
+
+pub const HudState = struct {
+    ticks: u64 = 0,
+    fractional_ticks: f32 = 0,
+};
+
+pub var hud_state = HudState{};
+
 pub const Grid = struct {
     cells: []Cell,
     rows: u32,
@@ -129,6 +139,17 @@ pub fn collide(position: Vec2) bool {
     return false;
 }
 
+pub fn incrementTicks(dt: f32) void {
+    const ticks_decimal = dt * @intToFloat(f32, ticks_per_second);
+    var ticks_floored = std.math.floor(ticks_decimal);
+    hud_state.ticks += @floatToInt(u64, ticks_floored);
+    hud_state.fractional_ticks += ticks_decimal - ticks_floored;
+    if (hud_state.fractional_ticks >= 1) {
+        hud_state.ticks += 1;
+        hud_state.fractional_ticks -= 1;
+    }
+}
+
 pub fn update(dt: f32) !void {
     const vel = if (player_velocity.norm() > 0) player_velocity.normalize() else player_velocity;
     const player1 = player.add(vel.scale(dt * cells_per_second * cell_size));
@@ -138,4 +159,8 @@ pub fn update(dt: f32) !void {
     }
 
     camera = player;
+
+    incrementTicks(dt);
+
+    std.debug.print("sol: {}\n", .{hud_state.ticks / ticks_per_sol});
 }
