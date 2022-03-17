@@ -47,10 +47,10 @@ pub const Cell = enum(u8) {
 };
 
 const ticks_per_second = 10;
-const ticks_per_sol = 100;
+const ticks_per_sol = 10;
 
 pub const HudState = struct {
-    ticks: u64 = 0,
+    ticks: u64 = 12345678900,
     fractional_ticks: f32 = 0,
 };
 
@@ -160,7 +160,9 @@ pub fn update(dt: f32) !void {
 
     camera = player;
 
-    incrementTicks(dt);
+    // incrementTicks(dt);
+}
 
-    std.debug.print("sol: {}\n", .{hud_state.ticks / ticks_per_sol});
+pub fn sols() u64 {
+    return hud_state.ticks / ticks_per_sol;
 }

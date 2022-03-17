@@ -19,6 +19,7 @@ var player_sprite: Sprite = undefined;
 var player_sprites: DirectionalSprites = undefined;
 var hab_sprite: Sprite = undefined;
 var spaceport_sprite: Sprite = undefined;
+var font: Font = undefined;
 
 const Direction = enum(u4) {
     North,
@@ -56,6 +57,8 @@ pub fn init() !void {
 
     hab_sprite = try makeSprite("assets/hab.png");
     spaceport_sprite = try makeSprite("assets/spaceport.png");
+
+    font = try makeFont("assets/font.png");
 
     shader_color = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
     shader_sprite = try Shader.init("shaders/vertex_sprite.glsl", "shaders/fragment_sprite.glsl");
@@ -163,9 +166,47 @@ const ColorSprite = struct {
 const Sprite = struct {
     vao: c.GLuint,
     texture: c.GLuint,
+    width: f32,
+    height: f32,
 };
 
+const Font = struct {
+    sprites: [10]Sprite,
+};
+
+fn makeFont(path: []const u8) !Font {
+    const im = try image.load(path);
+    defer im.deinit();
+
+    const crops = [_]image.Rect{
+        .{ .x0 = 1, .y0 = 0, .x1 = 16, .y1 = 18 },
+        .{ .x0 = 19, .y0 = 0, .x1 = 33, .y1 = 18 },
+        .{ .x0 = 36, .y0 = 0, .x1 = 49, .y1 = 18 },
+        .{ .x0 = 53, .y0 = 0, .x1 = 66, .y1 = 18 },
+        .{ .x0 = 69, .y0 = 0, .x1 = 83, .y1 = 18 },
+        .{ .x0 = 88, .y0 = 0, .x1 = 101, .y1 = 18 },
+        .{ .x0 = 104, .y0 = 0, .x1 = 117, .y1 = 18 },
+        .{ .x0 = 123, .y0 = 0, .x1 = 135, .y1 = 18 },
+        .{ .x0 = 139, .y0 = 0, .x1 = 151, .y1 = 18 },
+        .{ .x0 = 156, .y0 = 0, .x1 = 168, .y1 = 18 },
+    };
+
+    var f: Font = undefined;
+    for (crops) |cr, i| {
+        f.sprites[i] = try makeSpriteFromImage(try im.cropCopy(cr));
+    }
+
+    return f;
+}
+
 fn makeSprite(path: []const u8) !Sprite {
+    const im = try image.load(path);
+    defer im.deinit();
+
+    return try makeSpriteFromImage(im);
+}
+
+fn makeSpriteFromImage(im: image.Image) !Sprite {
     var sprite: Sprite = undefined;
     c.glGenVertexArrays(1, &sprite.vao);
     c.glBindVertexArray(sprite.vao);
@@ -177,8 +218,9 @@ fn makeSprite(path: []const u8) !Sprite {
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
 
-    const im = try image.load(path);
-    defer im.deinit();
+    const borderColor = [_]f32{ 0, 0, 0, 0 };
+    c.glTexParameterfv(c.GL_TEXTURE_2D, c.GL_TEXTURE_BORDER_COLOR, &borderColor);
+
     c.glTexImage2D(
         c.GL_TEXTURE_2D,
         0,
@@ -199,7 +241,7 @@ fn makeSprite(path: []const u8) !Sprite {
     defer c.glBindBuffer(c.GL_ARRAY_BUFFER, 0);
 
     var x: f32 = 1;
-    var y = 1.0/aspect_ratio;
+    var y = 1.0 / aspect_ratio;
     if (aspect_ratio < 1) {
         x = aspect_ratio;
         y = 1;
@@ -213,6 +255,8 @@ fn makeSprite(path: []const u8) !Sprite {
         x, 0, 1, 1,
         x, y, 1, 0,
     };
+    sprite.width = x;
+    sprite.height = y;
 
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(c_long, 4 * 6 * @sizeOf(f32)), &vertices, c.GL_STATIC_DRAW);
 
@@ -246,7 +290,7 @@ fn makeColorSprite(color: Vec3) ColorSprite {
     return sprite;
 }
 
-fn drawSprite(sprite: Sprite, model: Mat4) !void {
+fn drawSpriteWithView(sprite: Sprite, model: Mat4, view: Mat4) !void {
     shader_sprite.use();
     defer shader_sprite.unuse();
 
@@ -255,10 +299,14 @@ fn drawSprite(sprite: Sprite, model: Mat4) !void {
     defer c.glBindVertexArray(0);
 
     try shader_sprite.set_mat4("model", model);
-    try shader_sprite.set_mat4("view", game.view());
+    try shader_sprite.set_mat4("view", view);
     try shader_sprite.set_mat4("projection", game.perpective);
 
     c.glDrawArrays(c.GL_TRIANGLES, 0, 6);
+}
+
+fn drawSprite(sprite: Sprite, model: Mat4) !void {
+    try drawSpriteWithView(sprite, model, game.view());
 }
 
 fn drawColorSprite(sprite: ColorSprite, model: Mat4) !void {
@@ -330,6 +378,30 @@ fn drawPlayer() !void {
     try drawSprite(player_sprites.sprites[@enumToInt(direction)], model);
 }
 
+fn drawHud() !void {
+    const font_size = 0.5; // relative to cell size
+    const letter_spacing = 0.1; // relative to font size
+
+    var buf: [16]u8 = undefined;
+    const buffer = buf[0..];
+    const text = try std.fmt.bufPrint(buffer, "{}", .{game.sols()});
+
+    const scaling = font_size * game.cell_size;
+    const position = Vec2.init(200, 200);
+    var accumulated_width: f32 = position.x;
+    for (text) |letter| {
+        const sprite = font.sprites[letter - 48];
+        var model = Mat4.eye();
+        model.set(0, 0, scaling);
+        model.set(1, 1, scaling);
+        model.set(0, 3, accumulated_width);
+        model.set(1, 3, 200);
+        accumulated_width += (sprite.width + letter_spacing) * scaling;
+
+        try drawSpriteWithView(sprite, model, Mat4.eye());
+    }
+}
+
 pub fn draw() !void {
     var yi: u32 = 0;
     while (yi < game.currentScene().rows) : (yi += 1) {
@@ -345,4 +417,6 @@ pub fn draw() !void {
     }
 
     try drawPlayer();
+
+    try drawHud();
 }
