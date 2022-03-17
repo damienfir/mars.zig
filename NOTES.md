@@ -41,7 +41,7 @@ Things to work on:
 - Map generation
 - Collisions
 - User interface (HUD)
-    - Sol, oxygen
+    - Sol, oxygen (maybe not limiting when walking around)
     - General resource usage (basic measure of satisfaction)
 - Text rendering
 - Art (sprites)
@@ -53,3 +53,4 @@ Things to work on:
 - Time simulation
 - Settlement statistics
     - People
+- Day/night cycle
