@@ -19,13 +19,30 @@ var player_sprite: Sprite = undefined;
 var player_sprites: DirectionalSprites = undefined;
 var hab_sprite: Sprite = undefined;
 var spaceport_sprite: Sprite = undefined;
-var font: Font = undefined;
+var font_small: Font = undefined;
+var font_large: Font = undefined;
 
 const Direction = enum(u4) {
     North,
     South,
     East,
     West,
+};
+
+const ColorSprite = struct {
+    vao: c.GLuint,
+    color: Vec3,
+};
+
+const Sprite = struct {
+    vao: c.GLuint,
+    texture: c.GLuint,
+    width: f32,
+    height: f32,
+};
+
+const DirectionalSprites = struct {
+    sprites: [4]Sprite,
 };
 
 fn directionToVec2(d: Direction) Vec2 {
@@ -36,10 +53,6 @@ fn directionToVec2(d: Direction) Vec2 {
         .West => Vec2.init(-1, 0),
     };
 }
-
-const DirectionalSprites = struct {
-    sprites: [4]Sprite,
-};
 
 pub fn init() !void {
     grid_sprites[@enumToInt(game.Cell.Dirt)] = makeColorSprite(Vec3.init(0.8, 0.45, 0.1));
@@ -58,7 +71,7 @@ pub fn init() !void {
     hab_sprite = try makeSprite("assets/hab.png");
     spaceport_sprite = try makeSprite("assets/spaceport.png");
 
-    font = try makeFont("assets/font.png");
+    try makeFont();
 
     shader_color = try Shader.init("shaders/vertex.glsl", "shaders/fragment.glsl");
     shader_sprite = try Shader.init("shaders/vertex_sprite.glsl", "shaders/fragment_sprite.glsl");
@@ -158,45 +171,355 @@ pub const Shader = struct {
     }
 };
 
-const ColorSprite = struct {
-    vao: c.GLuint,
-    color: Vec3,
-};
-
-const Sprite = struct {
-    vao: c.GLuint,
-    texture: c.GLuint,
-    width: f32,
-    height: f32,
-};
-
 const Font = struct {
-    sprites: [10]Sprite,
-};
+    tex: c.GLuint,
+    vao: c.GLuint,
+    offsets: []usize,
+    widths: []f32,
 
-fn makeFont(path: []const u8) !Font {
-    const im = try image.load(path);
-    defer im.deinit();
-
-    const crops = [_]image.Rect{
-        .{ .x0 = 1, .y0 = 0, .x1 = 16, .y1 = 18 },
-        .{ .x0 = 19, .y0 = 0, .x1 = 33, .y1 = 18 },
-        .{ .x0 = 36, .y0 = 0, .x1 = 49, .y1 = 18 },
-        .{ .x0 = 53, .y0 = 0, .x1 = 66, .y1 = 18 },
-        .{ .x0 = 69, .y0 = 0, .x1 = 83, .y1 = 18 },
-        .{ .x0 = 88, .y0 = 0, .x1 = 101, .y1 = 18 },
-        .{ .x0 = 104, .y0 = 0, .x1 = 117, .y1 = 18 },
-        .{ .x0 = 123, .y0 = 0, .x1 = 135, .y1 = 18 },
-        .{ .x0 = 139, .y0 = 0, .x1 = 151, .y1 = 18 },
-        .{ .x0 = 156, .y0 = 0, .x1 = 168, .y1 = 18 },
-    };
-
-    var f: Font = undefined;
-    for (crops) |cr, i| {
-        f.sprites[i] = try makeSpriteFromImage(try im.cropCopy(cr));
+    pub fn definit(f: Font) void {
+        game.allocator.free(f.offsets);
+        game.allocator.free(f.widths);
     }
 
-    return f;
+    pub fn draw(f: Font, text: []const u8, position: Vec2) !void {
+        const font_size = 0.5; // relative to cell size
+        const letter_spacing = 0.12; // relative to font size
+
+        const scaling = font_size * game.cell_size;
+        var accumulated_width: f32 = position.x;
+
+        shader_sprite.use();
+        defer shader_sprite.unuse();
+
+        c.glBindTexture(c.GL_TEXTURE_2D, f.tex);
+        c.glBindVertexArray(f.vao);
+        defer c.glBindVertexArray(0);
+
+        for (text) |char| {
+            const char_index = char - 32;
+            _ = char_index;
+            var model = Mat4.eye();
+            model.set(0, 0, scaling);
+            model.set(1, 1, scaling);
+            model.set(0, 3, accumulated_width);
+            model.set(1, 3, position.y);
+            accumulated_width += (f.widths[char_index] + letter_spacing) * scaling;
+
+            try shader_sprite.set_mat4("model", model);
+            try shader_sprite.set_mat4("view", Mat4.eye());
+            try shader_sprite.set_mat4("projection", game.perpective);
+
+            c.glDrawArrays(c.GL_TRIANGLES, @intCast(c_int, f.offsets[char_index]), 6);
+            // c.glDrawArrays(c.GL_TRIANGLES, 17*6, 6);
+        }
+    }
+};
+
+fn makeFont() !void {
+    const im = try image.load("assets/font2.png");
+    defer im.deinit();
+
+    var font: Font = undefined;
+    c.glGenVertexArrays(1, &font.vao);
+    c.glBindVertexArray(font.vao);
+    defer c.glBindVertexArray(0);
+
+    c.glGenTextures(1, &font.tex);
+    c.glBindTexture(c.GL_TEXTURE_2D, font.tex);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+
+    c.glTexImage2D(
+        c.GL_TEXTURE_2D,
+        0,
+        c.GL_RGBA,
+        @intCast(c_int, im.width),
+        @intCast(c_int, im.height),
+        0,
+        c.GL_RGBA,
+        c.GL_UNSIGNED_BYTE,
+        im.data.ptr,
+    );
+    c.glGenerateMipmap(c.GL_TEXTURE_2D);
+    // const aspect_ratio = @intToFloat(f32, im.width) / @intToFloat(f32, im.height);
+
+    // const crops = [_]usize{
+    //     // format: x0 y0 w h
+    //     169, 0, 3, 8, // Space
+    //     169, 0, 3, 8, // !
+    //     169, 0, 3, 8, // "
+    //     169, 0, 3, 8, // #
+    //     169, 0, 3, 8, // $
+    //     169, 0, 3, 8, // %
+    //     169, 0, 3, 8, // &
+    //     169, 0, 3, 8, // '
+    //     169, 0, 3, 8, // (
+    //     169, 0, 3, 8, // )
+    //     169, 0, 3, 8, // *
+    //     169, 0, 3, 8, // +
+    //     169, 0, 3, 8, // ,
+    //     169, 0, 3, 8, // -
+    //     169, 0, 3, 8, // .
+    //     169, 0, 3, 8, // /
+    //     0, 16, 4, 8, // 0
+    //     5, 16, 3, 8, // 1
+    //     9, 16, 4, 8, // 2
+    //     14, 16, 4, 8, // 3
+    //     19, 16, 4, 8, // 4
+    //     24, 16, 4, 8, // 5
+    //     29, 16, 4, 8, // 6
+    //     34, 16, 4, 8, // 7
+    //     39, 16, 4, 8, // 8
+    //     44, 16, 4, 8, // 9
+    //     169, 0, 3, 8, // :
+    //     169, 0, 3, 8, // ;
+    //     169, 0, 3, 8, // <
+    //     169, 0, 3, 8, // =
+    //     169, 0, 3, 8, // >
+    //     169, 0, 3, 8, // ?
+    //     169, 0, 3, 8, // @
+    //     0, 0, 4, 8, // A
+    //     5, 0, 4, 8, // B
+    //     10, 0, 4, 8, // C
+    //     15, 0, 4, 8, // D
+    //     20, 0, 4, 8, // E
+    //     25, 0, 4, 8, // F
+    //     30, 0, 4, 8, // G
+    //     35, 0, 4, 8, // H
+    //     40, 0, 3, 8, // I
+    //     44, 0, 4, 8, // J
+    //     49, 0, 4, 8, // K
+    //     54, 0, 4, 8, // L
+    //     59, 0, 5, 8, // M
+    //     65, 0, 5, 8, // N
+    //     71, 0, 4, 8, // O
+    //     76, 0, 4, 8, // P
+    //     81, 0, 4, 8, // Q
+    //     86, 0, 4, 8, // R
+    //     91, 0, 4, 8, // S
+    //     96, 0, 5, 8, // T
+    //     102, 0, 4, 8, // U
+    //     107, 0, 5, 8, // V
+    //     113, 0, 5, 8, // W
+    //     119, 0, 5, 8, // X
+    //     125, 0, 5, 8, // Y
+    //     131, 0, 4, 8, // Z
+    //     169, 0, 3, 8, // [
+    //     169, 0, 3, 8, // \
+    //     169, 0, 3, 8, // ]
+    //     169, 0, 3, 8, // ^
+    //     169, 0, 3, 8, // _
+    //     169, 0, 3, 8, // `
+    //     0, 0, 4, 8, // a
+    //     5, 0, 4, 8, // b
+    //     10, 0, 4, 8, // c
+    //     15, 0, 4, 8, // d
+    //     20, 0, 4, 8, // e
+    //     25, 0, 4, 8, // f
+    //     30, 0, 4, 8, // g
+    //     35, 0, 4, 8, // h
+    //     40, 0, 3, 8, // i
+    //     44, 0, 4, 8, // j
+    //     49, 0, 4, 8, // k
+    //     54, 0, 4, 8, // l
+    //     59, 0, 5, 8, // m
+    //     65, 0, 5, 8, // n
+    //     71, 0, 4, 8, // o
+    //     76, 0, 4, 8, // p
+    //     81, 0, 4, 8, // q
+    //     86, 0, 4, 8, // r
+    //     91, 0, 4, 8, // s
+    //     96, 0, 5, 8, // t
+    //     81, 0, 4, 8, // u
+    //     86, 0, 4, 8, // v
+    //     91, 0, 4, 8, // w
+    //     96, 0, 5, 8, // x
+    //     96, 0, 5, 8, // y
+    //     96, 0, 5, 8, // z
+    // };
+
+    const ascii_offset = 32;
+    var crops = [_]usize{
+        // format: x0 y0 w h
+        166, 36, 6, 12, // Space
+        166, 36, 6, 12, // !
+        166, 36, 6, 12, // "
+        166, 36, 6, 12, // #
+        166, 36, 6, 12, // $
+        166, 36, 6, 12, // %
+        166, 36, 6, 12, // &
+        166, 36, 6, 12, // '
+        166, 36, 6, 12, // (
+        166, 36, 6, 12, // )
+        166, 36, 6, 12, // *
+        166, 36, 6, 12, // +
+        166, 36, 6, 12, // ,
+        166, 36, 6, 12, // -
+        166, 36, 6, 12, // .
+        166, 36, 6, 12, // /
+        0, 48, 5, 12, // 0
+        0, 48, 3, 12, // 1
+        0, 48, 5, 12, // 2
+        0, 48, 5, 12, // 3
+        0, 48, 5, 12, // 4
+        0, 48, 5, 12, // 5
+        0, 48, 5, 12, // 6
+        0, 48, 5, 12, // 7
+        0, 48, 5, 12, // 8
+        0, 48, 5, 12, // 9
+        166, 36, 6, 12, // :
+        166, 36, 6, 12, // ;
+        166, 36, 6, 12, // <
+        166, 36, 6, 12, // =
+        166, 36, 6, 12, // >
+        166, 36, 6, 12, // ?
+        166, 36, 6, 12, // @
+        0, 24, 6, 12, // A
+        0, 24, 6, 12, // B
+        0, 24, 6, 12, // C
+        0, 24, 6, 12, // D
+        0, 24, 5, 12, // E
+        0, 24, 5, 12, // F
+        0, 24, 6, 12, // G
+        0, 24, 6, 12, // H
+        0, 24, 3, 12, // I
+        0, 24, 5, 12, // J
+        0, 24, 5, 12, // K
+        0, 24, 5, 12, // L
+        0, 24, 7, 12, // M
+        0, 24, 7, 12, // N
+        0, 24, 7, 12, // O
+        0, 24, 6, 12, // P
+        0, 24, 7, 12, // Q
+        0, 24, 6, 12, // R
+        0, 24, 5, 12, // S
+        0, 24, 7, 12, // T
+        0, 24, 6, 12, // U
+        0, 24, 7, 12, // V
+        0, 24, 8, 12, // W
+        0, 24, 5, 12, // X
+        0, 24, 7, 12, // Y
+        0, 24, 6, 12, // Z
+        166, 36, 6, 12, // [
+        166, 36, 6, 12, // \
+        166, 36, 6, 12, // ]
+        166, 36, 6, 12, // ^
+        166, 36, 6, 12, // _
+        166, 36, 6, 12, // `
+        0,  36, 6, 12, // a
+        5,  36, 5, 12, // b
+        10, 36, 4, 12, // c
+        15, 36, 5, 12, // d
+        20, 36, 5, 12, // e
+        25, 36, 3, 12, // f
+        30, 36, 5, 12, // g
+        35, 36, 5, 12, // h
+        40, 36, 1, 12, // i
+        44, 36, 3, 12, // j
+        49, 36, 4, 12, // k
+        54, 36, 1, 12, // l
+        59, 36, 7, 12, // m
+        65, 36, 5, 12, // n
+        71, 36, 5, 12, // o
+        76, 36, 5, 12, // p
+        81, 36, 5, 12, // q
+        86, 36, 4, 12, // r
+        91, 36, 5, 12, // s
+        96, 36, 3, 12, // t
+        81, 36, 5, 12, // u
+        86, 36, 5, 12, // v
+        91, 36, 7, 12, // w
+        96, 36, 5, 12, // x
+        96, 36, 4, 12, // y
+        96, 36, 5, 12, // z
+    };
+
+    {
+        var i: usize = '0' - ascii_offset;
+        var acc: usize = 0;
+        while (i <= '9' - ascii_offset) : (i += 1) {
+            crops[i * 4] = acc;
+            acc += crops[i * 4 + 2] + 1;
+        }
+    }
+
+    {
+        var i: usize = 'A' - ascii_offset;
+        var acc: usize = 0;
+        while (i <= 'Z' - ascii_offset) : (i += 1) {
+            crops[i * 4] = acc;
+            acc += crops[i * 4 + 2] + 1;
+        }
+    }
+
+    {
+        var i: usize = 'a' - ascii_offset;
+        var acc: usize = 0;
+        while (i <= 'z' - ascii_offset) : (i += 1) {
+            crops[i * 4] = acc;
+            acc += crops[i * 4 + 2] + 1;
+        }
+    }
+
+    var vbo: c.GLuint = undefined;
+    c.glGenBuffers(1, &vbo);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, vbo);
+    defer c.glBindBuffer(c.GL_ARRAY_BUFFER, 0);
+
+    var buffer: [crops.len * 6 * 4]f32 = undefined;
+    var offsets = try game.allocator.alloc(usize, crops.len);
+    var widths = try game.allocator.alloc(f32, crops.len);
+
+    var i: u32 = 0;
+    while (i < crops.len) : (i += 4) {
+        const crop = crops[i .. i + 4];
+        const x0 = @intToFloat(f32, crop[0]) / @intToFloat(f32, im.width);
+        const y0 = @intToFloat(f32, crop[1]) / @intToFloat(f32, im.height);
+        const x1 = @intToFloat(f32, crop[0] + crop[2]) / @intToFloat(f32, im.width);
+        const y1 = @intToFloat(f32, crop[1] + crop[3]) / @intToFloat(f32, im.height);
+
+        std.debug.assert(crop[2] < crop[3]);
+        const x = @intToFloat(f32, crop[2]) / @intToFloat(f32, crop[3]);
+        const vertices = [_]f32{
+            //  vertex  texture
+            0, 0, x0, y1,
+            x, 0, x1, y1,
+            0, 1, x0, y0,
+            0, 1, x0, y0,
+            x, 0, x1, y1,
+            x, 1, x1, y0,
+        };
+        // const vertices = [_]f32{
+        //     //  vertex  texture
+        //     0, 0, 0, 0.1,
+        //     1, 0, 0.1, 0.1,
+        //     0, 1, 0, 0,
+        //     0, 1, 0, 0,
+        //     1, 0, 0.1, 0.1,
+        //     1, 1, 0.1, 0,
+        // };
+
+        const offset = i * vertices.len;
+        std.mem.copy(f32, buffer[offset .. offset + vertices.len], vertices[0..]);
+        offsets[i / 4] = i * 6;
+        widths[i / 4] = x;
+    }
+
+    // for (buffer[0..100]) |x| {
+    //     std.debug.print("{d:.2}\n", .{x});
+    // }
+
+    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(c_long, buffer.len * @sizeOf(f32)), &buffer, c.GL_STATIC_DRAW);
+    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), null);
+    c.glEnableVertexAttribArray(0);
+    c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, 4 * @sizeOf(f32), @intToPtr(*anyopaque, 2 * @sizeOf(f32)));
+    c.glEnableVertexAttribArray(1);
+
+    font.offsets = offsets;
+    font.widths = widths;
+
+    font_small = font;
 }
 
 fn makeSprite(path: []const u8) !Sprite {
@@ -309,6 +632,10 @@ fn drawSprite(sprite: Sprite, model: Mat4) !void {
     try drawSpriteWithView(sprite, model, game.view());
 }
 
+fn drawSpriteStatic(sprite: Sprite, model: Mat4) !void {
+    try drawSpriteWithView(sprite, model, Mat4.eye());
+}
+
 fn drawColorSprite(sprite: ColorSprite, model: Mat4) !void {
     shader_color.use();
     defer shader_color.unuse();
@@ -379,27 +706,11 @@ fn drawPlayer() !void {
 }
 
 fn drawHud() !void {
-    const font_size = 0.5; // relative to cell size
-    const letter_spacing = 0.1; // relative to font size
-
-    var buf: [16]u8 = undefined;
+    var buf: [32]u8 = undefined;
     const buffer = buf[0..];
-    const text = try std.fmt.bufPrint(buffer, "{}", .{game.sols()});
-
-    const scaling = font_size * game.cell_size;
-    const position = Vec2.init(10, game.window_height - 1.3 * scaling);
-    var accumulated_width: f32 = position.x;
-    for (text) |letter| {
-        const sprite = font.sprites[letter - 48];
-        var model = Mat4.eye();
-        model.set(0, 0, scaling);
-        model.set(1, 1, scaling);
-        model.set(0, 3, accumulated_width);
-        model.set(1, 3, position.y);
-        accumulated_width += (sprite.width + letter_spacing) * scaling;
-
-        try drawSpriteWithView(sprite, model, Mat4.eye());
-    }
+    const text = try std.fmt.bufPrint(buffer, "SOL {}", .{game.sols()});
+    const position = Vec2.init(10, game.window_height - 30);
+    try font_small.draw(text, position);
 }
 
 pub fn draw() !void {

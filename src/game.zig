@@ -105,13 +105,13 @@ pub fn init() !void {
     try scenes[0].buildings.append(Building{
         .size = 5,
         .pos_x = 3,
-        .pos_y = 12,
+        .pos_y = 6,
         .class = .Hab,
     });
     try scenes[0].buildings.append(Building{
         .size = 2,
         .pos_x = 12,
-        .pos_y = 12,
+        .pos_y = 2,
         .class = .Spaceport,
     });
     current_scene = 0;
